@@ -184,35 +184,37 @@ with tab_manager:
 
     # --- 恢复内容 ---
     # --- Top 10 采购额增长供应商分析 (可折叠) ---
-    with st.expander("📈 Top 10 采购额增长供应商 (绝对金额)", expanded=True): # 默认展开
-        # 计算Top 10增长供应商 (按绝对增长金额)
+
+    # --- Top 10 采购额增长子类别分析 (可折叠) ---
+    with st.expander("📈 Top 10 采购额增长子类别 (绝对金额)", expanded=True): # 默认折叠
+        # 计算Top 10增长子类别 (按绝对增长金额)
         # 确保 '增长金额' 列是数值类型，如果 load_data 中未处理
-        if not pd.api.types.is_numeric_dtype(supplier_data['增长金额']):
-            supplier_data['增长金额'] = pd.to_numeric(supplier_data['增长金额'], errors='coerce')
-            supplier_data.dropna(subset=['增长金额'], inplace=True) # 删除无法转换的行
+        if not pd.api.types.is_numeric_dtype(category_data['增长金额']):
+            category_data['增长金额'] = pd.to_numeric(category_data['增长金额'], errors='coerce')
+            category_data.dropna(subset=['增长金额'], inplace=True) # 删除无法转换的行
 
-        top_10_growth_suppliers = supplier_data.nlargest(10, '增长金额').copy()
+        top_10_growth_subcategories = category_data.nlargest(10, '增长金额').copy()
+        top_10_growth_subcategories.reset_index(drop=True, inplace=True) # 重置索引方便后面使用 index+1
 
-        # 可视化 Top 10 增长供应商的绝对增长金额
+        # 可视化 Top 10 增长子类别的绝对增长金额
         st.subheader("可视化：增长金额对比")
-        if not top_10_growth_suppliers.empty:
-            fig_top10_bar = px.bar(
-                top_10_growth_suppliers,
-                x='供应商',
+        if not top_10_growth_subcategories.empty:
+            fig_top10_subcat_bar = px.bar(
+                top_10_growth_subcategories,
+                x='Sub category',
                 y='增长金额',
-                title="Top 10 供应商 - 绝对增长金额 (2025预算 vs 2024实际)",
+                title="Top 10 子类别 - 绝对增长金额 (2025预算 vs 2024实际)",
                 text='增长金额',
-                labels={'供应商': '供应商名称', '增长金额': '增长金额 (元)'},
-                color='Category', # 按品类着色
-                hover_data=['Category', 'Sub Category', '增长率']
+                labels={'Sub category': '子类别名称', '增长金额': '增长金额 (元)'},
+                color='Category', # 按父品类着色
+                hover_data=['Category', '增长率']
             )
-            fig_top10_bar.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
-            fig_top10_bar.update_layout(xaxis_tickangle=-45, height=500, yaxis_title="增长金额 (元)")
-            st.plotly_chart(fig_top10_bar, use_container_width=True)
+            fig_top10_subcat_bar.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+            fig_top10_subcat_bar.update_layout(xaxis_tickangle=-45, height=500, yaxis_title="增长金额 (元)")
+            st.plotly_chart(fig_top10_subcat_bar, use_container_width=True)
         else:
-            st.warning("未能计算Top 10增长供应商数据。")
-
-        # 战略建议 (按 Category 分组显示)
+            st.warning("未能计算Top 10增长子类别数据。")
+                # 战略建议 (按 Category 分组显示)
         st.subheader("战略考量 (按品类)")
         category_advice = {
             'Copper &Aluminum': """物料特点：大宗商品，价格波动大，市场透明度相对较高，品质相对标准化。
@@ -251,76 +253,6 @@ with tab_manager:
             'default': """物料特点：[请根据实际情况补充]
 战略建议：首先分析增长的具体原因（是单价上涨还是采购量增加？）。评估供应商的产能、质量、交付能力是否能支撑此增长。基于该品类的战略重要性和供应商表现，决定采用深化合作、加强管控、引入竞争还是寻求替代等策略。"""
         }
-
-        if not top_10_growth_suppliers.empty:
-            unique_categories_supplier = top_10_growth_suppliers['Category'].unique()
-            for category in unique_categories_supplier:
-                advice = category_advice.get(category, category_advice['default'])
-                final_advice = advice
-                if "[请根据实际情况补充]" in advice:
-                    final_advice = advice.replace("[请根据实际情况补充]", f"所属品类为 {category}")
-                
-                # 为每个唯一的Category显示一次建议
-                with st.container(border=True): # 使用带边框的容器区分
-                     st.markdown(f"##### {category}")
-                     st.info(final_advice)
-        else:
-            st.info("无供应商数据可供生成战略建议。")
-
-        # 显示 Top 10 供应商详细数据列表
-        st.subheader("Top 10 供应商详细数据")
-        if not top_10_growth_suppliers.empty:
-            display_suppliers = top_10_growth_suppliers[[
-                '供应商', 'Category', 'Sub Category', 
-                '2024合计入库金额', '2025合计预算金额', '增长金额', '增长率'
-            ]].copy()
-            # 格式化显示
-            display_suppliers['增长率'] = display_suppliers['增长率'].apply(
-                lambda x: f"{x:.1f}%" if pd.notna(x) else "N/A"
-            )
-            # 添加序号列
-            display_suppliers.insert(0, '排名', range(1, 1 + len(display_suppliers)))
-            st.dataframe(
-                display_suppliers.style.format({
-                    '2024合计入库金额': '{:,.0f}',
-                    '2025合计预算金额': '{:,.0f}',
-                    '增长金额': '{:,.0f}'
-                }), 
-                use_container_width=True,
-                hide_index=True # 隐藏 DataFrame 默认索引
-            )
-        else:
-            st.info("没有找到符合条件的供应商数据。")
-
-    # --- Top 10 采购额增长子类别分析 (可折叠) ---
-    with st.expander("📈 Top 10 采购额增长子类别 (绝对金额)", expanded=True): # 默认折叠
-        # 计算Top 10增长子类别 (按绝对增长金额)
-        # 确保 '增长金额' 列是数值类型，如果 load_data 中未处理
-        if not pd.api.types.is_numeric_dtype(category_data['增长金额']):
-            category_data['增长金额'] = pd.to_numeric(category_data['增长金额'], errors='coerce')
-            category_data.dropna(subset=['增长金额'], inplace=True) # 删除无法转换的行
-
-        top_10_growth_subcategories = category_data.nlargest(10, '增长金额').copy()
-        top_10_growth_subcategories.reset_index(drop=True, inplace=True) # 重置索引方便后面使用 index+1
-
-        # 可视化 Top 10 增长子类别的绝对增长金额
-        st.subheader("可视化：增长金额对比")
-        if not top_10_growth_subcategories.empty:
-            fig_top10_subcat_bar = px.bar(
-                top_10_growth_subcategories,
-                x='Sub category',
-                y='增长金额',
-                title="Top 10 子类别 - 绝对增长金额 (2025预算 vs 2024实际)",
-                text='增长金额',
-                labels={'Sub category': '子类别名称', '增长金额': '增长金额 (元)'},
-                color='Category', # 按父品类着色
-                hover_data=['Category', '增长率']
-            )
-            fig_top10_subcat_bar.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
-            fig_top10_subcat_bar.update_layout(xaxis_tickangle=-45, height=500, yaxis_title="增长金额 (元)")
-            st.plotly_chart(fig_top10_subcat_bar, use_container_width=True)
-        else:
-            st.warning("未能计算Top 10增长子类别数据。")
 
         # 战略建议 (按父 Category 分组显示)
         st.subheader("战略考量 (按父品类)")
@@ -423,6 +355,74 @@ with tab_manager:
                 st.markdown("---")
         else:
              st.info("没有找到符合条件的子类别数据。")
+    with st.expander("📈 Top 10 采购额增长供应商 (绝对金额)", expanded=True): # 默认展开
+        # 计算Top 10增长供应商 (按绝对增长金额)
+        # 确保 '增长金额' 列是数值类型，如果 load_data 中未处理
+        if not pd.api.types.is_numeric_dtype(supplier_data['增长金额']):
+            supplier_data['增长金额'] = pd.to_numeric(supplier_data['增长金额'], errors='coerce')
+            supplier_data.dropna(subset=['增长金额'], inplace=True) # 删除无法转换的行
+
+        top_10_growth_suppliers = supplier_data.nlargest(10, '增长金额').copy()
+
+        # 可视化 Top 10 增长供应商的绝对增长金额
+        st.subheader("可视化：增长金额对比")
+        if not top_10_growth_suppliers.empty:
+            fig_top10_bar = px.bar(
+                top_10_growth_suppliers,
+                x='供应商',
+                y='增长金额',
+                title="Top 10 供应商 - 绝对增长金额 (2025预算 vs 2024实际)",
+                text='增长金额',
+                labels={'供应商': '供应商名称', '增长金额': '增长金额 (元)'},
+                color='Category', # 按品类着色
+                hover_data=['Category', 'Sub Category', '增长率']
+            )
+            fig_top10_bar.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+            fig_top10_bar.update_layout(xaxis_tickangle=-45, height=500, yaxis_title="增长金额 (元)")
+            st.plotly_chart(fig_top10_bar, use_container_width=True)
+        else:
+            st.warning("未能计算Top 10增长供应商数据。")
+
+
+        if not top_10_growth_suppliers.empty:
+            unique_categories_supplier = top_10_growth_suppliers['Category'].unique()
+            for category in unique_categories_supplier:
+                advice = category_advice.get(category, category_advice['default'])
+                final_advice = advice
+                if "[请根据实际情况补充]" in advice:
+                    final_advice = advice.replace("[请根据实际情况补充]", f"所属品类为 {category}")
+                
+                # 为每个唯一的Category显示一次建议
+                with st.container(border=True): # 使用带边框的容器区分
+                     st.markdown(f"##### {category}")
+                     st.info(final_advice)
+        else:
+            st.info("无供应商数据可供生成战略建议。")
+
+        # 显示 Top 10 供应商详细数据列表
+        st.subheader("Top 10 供应商详细数据")
+        if not top_10_growth_suppliers.empty:
+            display_suppliers = top_10_growth_suppliers[[
+                '供应商', 'Category', 'Sub Category', 
+                '2024合计入库金额', '2025合计预算金额', '增长金额', '增长率'
+            ]].copy()
+            # 格式化显示
+            display_suppliers['增长率'] = display_suppliers['增长率'].apply(
+                lambda x: f"{x:.1f}%" if pd.notna(x) else "N/A"
+            )
+            # 添加序号列
+            display_suppliers.insert(0, '排名', range(1, 1 + len(display_suppliers)))
+            st.dataframe(
+                display_suppliers.style.format({
+                    '2024合计入库金额': '{:,.0f}',
+                    '2025合计预算金额': '{:,.0f}',
+                    '增长金额': '{:,.0f}'
+                }), 
+                use_container_width=True,
+                hide_index=True # 隐藏 DataFrame 默认索引
+            )
+        else:
+            st.info("没有找到符合条件的供应商数据。")
 
     # --- 2025年关键子类别降本指南 (环形图 + 交互式表格) ---
     with st.expander("🎯 2025年关键子类别降本指南 (预算占比与供应商明细)", expanded=True): # 将 expanded 改为 True
